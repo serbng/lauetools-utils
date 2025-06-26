@@ -7,7 +7,7 @@ import numpy as np
 from IPython.display import display
 import h5py
 
-from graintools.visualization._utils import draw_colorbar
+from ._utils import draw_colorbar
 
 
 def plotfluoh5(h5path: str, 
