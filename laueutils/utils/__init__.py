@@ -1,0 +1,1 @@
+from ._hide_print import HidePrint
