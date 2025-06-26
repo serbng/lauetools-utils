@@ -5,7 +5,7 @@ import multiprocess as mp
 import itertools
 # ----
 from tqdm import tqdm
-from .classes import FitFile
+from . import FitFile
 
 def _parse_fitfile(folderpath: str,
                    file_index: int, 
