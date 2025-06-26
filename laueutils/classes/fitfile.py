@@ -1,6 +1,6 @@
 import numpy as np
 
-from laueutils.utils.strings import clean_string, remove_newline
+from ..utils.strings import clean_string, remove_newline
 character_list = ["[", "]", "\n", "#"]
 
 class FitFile:
