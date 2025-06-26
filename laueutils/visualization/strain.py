@@ -2,12 +2,12 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.colors import TwoSlopeNorm
 from scipy.optimize import curve_fit
-from graintools.classes import FitFileSeries
-from graintools.utils import tabular_data
-from graintools.visualization import (draw_colorbar, 
-                                      cbarticks_zero_centered, 
-                                      cbarticks_scientific,
-                                      limits_meanNstd)
+from ..classes import FitFileSeries
+from ..utils import tabular_data
+from ._utils import (draw_colorbar, 
+                     cbarticks_zero_centered, 
+                     cbarticks_scientific,
+                     limits_meanNstd)
 
 def __gaussian__(x, A, mu, sigma):
     return A * np.exp(- (x - mu)**2 / (2 * sigma**2))
