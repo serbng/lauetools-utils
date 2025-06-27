@@ -1,6 +1,5 @@
-from ._peaks import (
-    remove_duplicates,
-    subtract,
-    intersect,
-    track
-)
+from .intersect import intersect
+from .remove_duplicates import remove_duplicates
+from .subtract import subtract
+from .track import track
+from .simulate import simulate

@@ -48,6 +48,8 @@ cover/
 # Jupyter Notebook
 .ipynb_checkpoints
 
+*__pycache__*
+
 # IPython
 profile_default/
 ipython_config.py
