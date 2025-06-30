@@ -100,7 +100,7 @@ def _mosaic_line(line_paths, roi_indices, line_direction):
         # |     |  data coming from:
         # |     |  line_paths[0]
         # *-----* 
-        return np.vstack(line_data.reverse())
+        return np.vstack(line_data[::-1])
 
 def mosaic(paths, num_rows, num_cols, roi_center, roi_boxsize, scan_direction='horizontal', workers=4):
     """Stitch together the same ROI of different images to create a mosaic.
