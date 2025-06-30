@@ -126,7 +126,7 @@ def mosaic(paths, num_rows, num_cols, roi_center, roi_boxsize, scan_direction='h
     with mp.Pool(workers) as pool:
         mosaic_rows = pool.starmap(
             lambda paths: _mosaic_row(paths, (x1, x2, y1, y2)),
-            row_paths,
+            zip(row_paths),
             chunksize=1
         )
     # mosaic_rows is now a list of arrays containing the data of the rows
