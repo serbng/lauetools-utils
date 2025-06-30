@@ -44,21 +44,26 @@ def display_image(data, roi=None, **kwargs):
     ax.set_ylabel('Y pixel')
     ax.set_aspect('equal')
 
-def _mosaic_row(row_paths, roi_indices):
+def _mosaic_line(line_paths, roi_indices, line_direction):
     """Worker function in mosaic.
 
     Parameters
     ----------
-    row_paths      (list[str]): list of paths to the files of the images of one row of the mosaic.
-    roi_indices   (tuple[int]): (x1, x2, y1, y2) that will be used as a slice of the image data.
+    line_paths     (list[str]): list of paths to the files of the images of one line of the mosaic.
+    roi_indices   (tuple[int]): (x1, x2, y1, y2) that will be used to slice the image data.
+    line_direction       (str): Must be in {'horizontal', 'vertical'}. Whether to treat the line as
+                                as a row or a columns
 
     Returns
     ----------
-    row_data      [np.ndarray]: Array of shape (x2-x1, (y2-y1)*len(row_paths)) with the data of a row.
+    row_data      [np.ndarray]: Array with the data of a row/column.
     """
+    if line_direction not in ('vertical', 'horizontal'):
+        raise(ValueError, "line_durectuib must be in {'horizontal', 'vertical'}. " + f"Got {line_direction}.")
+        
     x1, x2, y1, y2 = roi_indices
-    row_data = []
-    for path in row_paths:
+    line_data = []
+    for path in line_paths:
         # Fetch data whether it exists or not
         try:
             with fabio.open(path) as image:
@@ -69,17 +74,34 @@ def _mosaic_row(row_paths, roi_indices):
             roi_boxsize = (x2-x1, y2-y1)
             image_data = np.zeros(roi_boxsize)
 
-        row_data.append(image_data)
-        
-    row_data = np.hstack(row_data)
-    # Now row_data is a matrix containing the data of a row
-    # <-- len(row)*roi_boxsize[1] -->
-    # *-----*-----*   .....   *-----*  
-    # |     |     |           |     |  roi_boxsize[0]
-    # |     |     |           |     |  
-    # *-----*-----*   .....   *-----*  
-    return row_data
-    
+        line_data.append(image_data)
+
+    if line_direction == 'horizontal':
+        # Now line_data is a matrix containing the data of a row
+        # <--len(line_paths)*roi_boxsize[1]-->
+        # *-----*-----*     .....     *-----*  
+        # |     |     |               |     |  roi_boxsize[0]
+        # |     |     |               |     |  
+        # *-----*-----*     .....     *-----*
+        return np.hstack(line_data)
+    if line_direction == 'vertical':
+        # Now line_data is a matrix containing the data of a columns
+        # <-- roi_boxsize[0] -->
+        # *-----*
+        # |     |  data coming from:
+        # |     |  line_paths[-1]
+        # *-----*  
+        # |     |  
+        # |     |   len(line_paths) * roi_boxsize[1]
+        # *-----*
+        # .     .
+        # .     .
+        # *-----*  
+        # |     |  data coming from:
+        # |     |  line_paths[0]
+        # *-----* 
+        return np.vstack(line_data.reversed())
+
 def mosaic(paths, num_rows, num_cols, roi_center, roi_boxsize, scan_direction='horizontal', workers=4):
     """Stitch together the same ROI of different images to create a mosaic.
     
@@ -113,27 +135,27 @@ def mosaic(paths, num_rows, num_cols, roi_center, roi_boxsize, scan_direction='h
     else:
         raise(ValueError, "scan_direction must be in {'horizontal', 'vertical'}. " + f"Got {scan_direction}.")
     
-    row_indices = linear_chunks(num_rows * num_cols, chunk_size)
+    line_indices = linear_chunks(num_rows * num_cols, chunk_size)
     # Ex.:
-    # row_indices = linear_chunks(81 * 81, 81)
-    # row_indices
+    # line_indices = linear_chunks(81 * 81, 81)
+    # line_indices
     # [[   0,    1,    2,    3,    4, ...,   80],
     #  [  81,   82,   83,   84,   85, ...,  161].
     #  ...
     #  [6479, 6480, 6481, 6482, 6483, ..., 6560]]
-    # Each row_indices contains the indices of the files corresponding to a row
-    row_paths = [ [paths[i] for i in columns] for columns in row_indices]
+    # Each element of line_indices is a list of indices corresponding to the files of a line
+    row_paths = [ [paths[i] for i in line] for line in line_indices]
     with mp.Pool(workers) as pool:
-        mosaic_rows = pool.starmap(
-            lambda paths: _mosaic_row(paths, (x1, x2, y1, y2)),
+        mosaic_lines = pool.starmap(
+            lambda paths: _mosaic_line(paths, (x1, x2, y1, y2), line_direction=scan_direction),
             zip(row_paths),
             chunksize=1
         )
-    # mosaic_rows is now a list of arrays containing the data of the rows
-    # concatenating them vertically creates the mosaic
-    mosaic = np.vstack(mosaic_rows)
+
+    if scan_direction == 'horizontal':
+        mosaic = np.vstack(mosaic_lines)
 
     if scan_direction == 'vertical':
-        mosaic = mosaic.T
+        mosaic = np.hstack(mosaic_lines)
     
     return mosaic    
