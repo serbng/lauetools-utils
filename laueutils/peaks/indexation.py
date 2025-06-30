@@ -12,7 +12,7 @@ def refinement_dict_from_kwargs(**kwargs):
         # I use kwargs.get for the entries that are also an input of the indexing function
         'AngleTolLUT':                kwargs.pop("lut_angle_tol", 0.5),   # Tolerance angle [deg]
         'nlutmax'    :                kwargs.get("lut_max_index", DEFAULT_LUT_MAX_INDEX), # Maximum miller index checked in the LUT
-        'list matching tol angles':   kwargs.get("matching_angle_tols", DEFAULT_MATCHING_ANGLE_TOLS,
+        'list matching tol angles':   kwargs.get("matching_angle_tols", DEFAULT_MATCHING_ANGLE_TOLS),
         'central spots indices':      kwargs.pop("spot_set_A", [0]),  # spots set A 
         #number of most intense spot candidate to have a recognisable distance
         'NBMAXPROBED':                kwargs.pop("spot_set_B", 10),
