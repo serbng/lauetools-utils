@@ -80,7 +80,7 @@ def _mosaic_row(row_paths, roi_indices):
     # *-----*-----*   .....   *-----*  
     return row_data
     
-def mosaic(paths, num_rows, num_cols, roi_center, roi_boxsize, workers=4):
+def mosaic(paths, num_rows, num_cols, roi_center, roi_boxsize, scan_direction='horizontal', workers=4):
     """Stitch together the same ROI of different images to create a mosaic.
     
     The images are stitched together row by row. So, if ´´´num_cols=10´´´, the images are read in chunks of 10 and
@@ -93,6 +93,7 @@ def mosaic(paths, num_rows, num_cols, roi_center, roi_boxsize, workers=4):
     num_cols           (int): When the images come from a 2D scan, number of coloumns of the scan.
     roi_center  (tuple[int]): Position on the detector to track.
     roi_boxsize (tuple[int]): Size of the ROI. It is the side of a square centered at ´´´roi_center´´´.
+    scan_direction     (str): (optional) Defaults to 'horizontal'. Specify if the scan is done row by row or column by column.
     workers            (int): (optional) Default to 4. Number of cpus to use to speed up the process.
 
 
@@ -104,7 +105,15 @@ def mosaic(paths, num_rows, num_cols, roi_center, roi_boxsize, workers=4):
     y2 = int(roi_center[0] + roi_boxsize[0] // 2)
     x1 = int(roi_center[1] - roi_boxsize[1] // 2)
     x2 = int(roi_center[1] + roi_boxsize[1] // 2)
-    row_indices = linear_chunks(num_rows * num_cols, num_cols)
+
+    if scan_direction == 'horizontal':
+        chunk_size = num_cols
+    elif scan_direction =='vertical':
+        chunk_size = num_rows
+    else:
+        raise(ValueError, "scan_direction must be in {'horizontal', 'vertical'}. " + f"Got {scan_direction}.")
+    
+    row_indices = linear_chunks(num_rows * num_cols, chunk_size)
     # Ex.:
     # row_indices = linear_chunks(81 * 81, 81)
     # row_indices
@@ -116,12 +125,15 @@ def mosaic(paths, num_rows, num_cols, roi_center, roi_boxsize, workers=4):
     row_paths = [ [paths[i] for i in columns] for columns in row_indices]
     with mp.Pool(workers) as pool:
         mosaic_rows = pool.starmap(
-            lambda row: _mosaic_row(row, (x1, x2, y1, y2)),
+            lambda paths: _mosaic_row(paths, (x1, x2, y1, y2)),
             row_paths,
             chunksize=1
         )
     # mosaic_rows is now a list of arrays containing the data of the rows
     # concatenating them vertically creates the mosaic
     mosaic = np.vstack(mosaic_rows)
+
+    if scan_direction == 'vertical':
+        mosaic = mosaic.T
     
     return mosaic    
