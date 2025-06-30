@@ -24,6 +24,8 @@ def refinement_dict_from_kwargs(**kwargs):
         'MATCHINGRATE_THRESHOLD_IAL': kwargs.pop("MATCHINGRATE_THRESHOLD_IAL", 2)
     }
 
+    return refinement_dict, kwargs
+
 def index(peaks, material, **kwargs):
     """ Wrapper of LaueTools.indexingSpotsSet.spotsset.IndexSpotsSet for easier indexation.
 
