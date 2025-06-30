@@ -81,5 +81,13 @@ def index(peaks, material, **kwargs):
     
 
 
-def check_orientation():
-    pass
+def check_orientation(peaks, material, orientation, **kwargs):
+    kwargs.update(
+        {"spot_set_B": 0,
+         "previousResults": [1, [orientation], 5, 5]}
+    )
+
+    try:
+        index(peaks, material, **kwargs)
+    except:
+        pass
