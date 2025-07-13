@@ -4,6 +4,8 @@ from pandas import DataFrame
 from ..utils.strings import clean_string, remove_newline
 character_list = ["[", "]", "\n", "#"]
 
+from ..visualization.indexation import indexation_plot
+
 # ======================== Functions to parse the file entries ========================
 
 def read_number_indexed_spots(fitfile_obj, file, line):
@@ -44,7 +46,8 @@ def read_peaks_data(fitfile_obj, file, line):
     file_columns = line.split()[1:] # removing spot_index
     dataframe_columns = [dataframe_name[col] for col in file_columns]
     fitfile_obj.number_indexed_spots = nb_peaks
-    fitfile_obj.peaklist = DataFrame(data=peaklist, columns=dataframe_columns)
+    # convert_dtypes infers most suitable dtype. This will make h, k, l and grain idx integers
+    fitfile_obj.peaklist = DataFrame(data=peaklist, columns=dataframe_columns).convert_dtypes()
     
     # skip lines containing the peaks
     for _ in range(nb_peaks):
@@ -223,6 +226,7 @@ file_entries = {
 
 dataframe_name = {
     "intensity": "Intensity",
+    "Intensity": "Intensity",
     "h": "h",
     "k": "k",
     "l": "l",
@@ -365,16 +369,12 @@ class FitFile:
     """
     
     def __init__(self, filename: str, verbose: bool = False):        
-        try:
-            with open(filename, "r") as file:
-                self.filename = filename
-                
-                read_file_header(self, file)
-                read_file_body(self, file)
-                self._compute_reciprocal_space()
-        except IOError:
-            if verbose:
-                print(f"Can't find the file \n{filename}")
+        with open(filename, "r") as file:
+            self.filename = filename
+            
+            read_file_header(self, file)
+            read_file_body(self, file)
+            self._compute_reciprocal_space()
             
     def _compute_reciprocal_space(self):
         # some extra calculations to get the direct and reciprocal lattice basis vector
@@ -396,3 +396,41 @@ class FitFile:
             self.coa = np.linalg.linalg.norm(self.c_prime) / np.linalg.linalg.norm(self.a_prime)
         except ValueError:
             print("could not compute the reciprocal space from the UBB0")
+
+    @property
+    def peak_positions(self):
+        return self.peaklist[["Xexp", "Yexp"]]
+    
+    @property
+    def peak_info(self):
+        return self.peaklist[["h", "k", "l", "Xexp", "Yexp", "2θexp", "χexp", "Intensity"]]
+    
+    @property
+    def info(self):
+        print(f"""fitfile location "{self.filename}"
+Peaks data comes from the corfile "{self.corfile}"
+Created {self.timestamp}
+Software used {self.software}
+
+Material: {self.element}
+Number of indexed spots: {self.number_indexed_spots}
+Mean pixel deviation: {self.mean_pixel_deviation}
+
+{" New lattice parameters ":=^28}
+a': {self.new_lattice_parameters[0]:11.7f}
+b': {self.new_lattice_parameters[1]:11.7f}
+c': {self.new_lattice_parameters[2]:11.7f}
+α': {self.new_lattice_parameters[3]:11.7f}
+β': {self.new_lattice_parameters[4]:11.7f}
+γ': {self.new_lattice_parameters[5]:11.7f}
+
+{" Calibration parameters ":=^28}
+distance: {self.CCDdict["DetectorParameters"][0]:7.2f} [mm]
+x_center: {self.CCDdict["DetectorParameters"][1]:7.2f} [px]
+y_center: {self.CCDdict["DetectorParameters"][2]:7.2f} [px]
+    beta: {self.CCDdict["DetectorParameters"][3]:7.2f} [deg]
+   gamma: {self.CCDdict["DetectorParameters"][4]:7.2f} [deg]
+""")
+    
+    def plot(self):
+        indexation_plot(self.peaklist)
