@@ -405,6 +405,42 @@ class FitFile:
     def peak_info(self):
         return self.peaklist[["h", "k", "l", "Xexp", "Yexp", "2θexp", "χexp", "Intensity"]]
     
+    # Methods that will be useful for FitFileSeries
+    @property
+    def lattice_parameters(self):
+        columns = ["a'", "b'", "c'", "α'", "β'", "γ'", "b/a", "c/a"]
+        data = np.concatenate(
+                (self.new_lattice_parameters, self.boa, self.coa)
+            ).reshape(1,-1)
+        
+        return DataFrame(data=data, columns=columns)
+    
+    @property
+    def direct_lattice(self):
+        columns = [
+            "a'x", "a'y", "a'z",
+            "b'x", "b'y", "b'z",
+            "c'x", "c'y", "c'z"
+        ]
+        data = np.concatenate(
+            (self.a_prime, self.b_prime, self.c_prime)
+            ).reshape(1,-1)
+        
+        return DataFrame(data=data, columns=columns)
+    
+    @property
+    def reciprocal_lattice(self):
+        columns = [
+            "a*'x", "a*'y", "a*'z",
+            "b*'x", "b*'y", "b*'z",
+            "c*'x", "c*'y", "c*'z"
+        ]
+        data = np.concatenate(
+            (self.astar_prime, self.bstar_prime, self.cstar_prime)
+            ).reshape(1,-1)
+        
+        return DataFrame(data=data, columns=columns)
+    
     @property
     def info(self):
         print(f"""fitfile location "{self.filename}"
