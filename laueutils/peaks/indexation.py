@@ -77,7 +77,7 @@ def index(peaks, material, **kwargs):
         }
     )
 
-    spotset.IndexSpotSet(peaks, material, Emin, Emax, refinement_dict, database, **indexation_kwargs)
+    spotset.IndexSpotsSet(peaks, material, Emin, Emax, refinement_dict, database, **indexation_kwargs)
     
 
 
