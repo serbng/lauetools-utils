@@ -1,7 +1,12 @@
 .DS_STORE
+miniconda.sh
+.gitignore
+./examples/fitfile_parsing/parsing_example.ipynb
+pattern_separation.ipynb
 
 # Distribution / packaging
 .Python
+*.ipynb
 build/
 develop-eggs/
 dist/

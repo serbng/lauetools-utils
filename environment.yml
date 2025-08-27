@@ -1,0 +1,25 @@
+name: lauetools-utils-env
+channels:
+  - conda-forge
+dependencies:
+  - python=3.12
+  - ipykernel
+  - jupyterlab
+  - numpy=2.0.*
+  - scipy=1.13.*
+  - matplotlib=3.9.*
+  - multiprocess=0.70.18
+  - pandas=2.2.*
+  - h5py=3.11.*
+  - fabio=2024.9.*
+  - scikit-image=0.24.*  
+  - scikit-learn=1.5.*
+  - wxpython=4.2.*
+  - plotly=6.*
+  - anywidget>=0.9
+  - ipympl
+  - ipywidgets
+  - widgetsnbextension
+  - pip
+  - pip:
+      - LaueTools==3.1.25
