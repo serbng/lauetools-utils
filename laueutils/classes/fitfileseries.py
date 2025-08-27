@@ -23,14 +23,14 @@ class FitFileSeries:
         
         self._excluded_attributes = ["filename", "corfile", "software", "timestamp", "peaklist", "CCDdict"]    
     
-    def _collect(self, attr, match_length=True, match_data_shape=True, padding=np.NaN):
+    def _collect(self, attr, match_length=True, match_data_shape=True, padding=np.nan):
         """Go through each fit file and retrieve the value 
 
         Args:
             attr (str): name of the attribute of the FitFile class
             match_length (bool, optional): Where the fit file doesn't exist, put "padding" to match the length of the output to the number of fit files. Defaults to True.
             match_data_shape (bool, optional): Where the fit file doesn't exist, put a numpy array with the shape that the attribute is supposed to have and fill it with "padding". Defaults to True.
-            padding (float, optional): Value to use for the padding. Defaults to np.NaN.
+            padding (float, optional): Value to use for the padding. Defaults to np.nan.
 
         Raises:
             AttributeError: When attr is not an attribute of class FitFile
@@ -150,7 +150,7 @@ class FitFileSeries:
             
             if len(match)==0 or ff is None:
                 match =  pd.DataFrame(
-                    data=np.full((1, M), np.NaN), 
+                    data=np.full((1, M), np.nan), 
                     columns=columns, 
                     index=[i]
                 )
