@@ -7,7 +7,7 @@ from . import FitFile
 def _parse_fitfile(file_path):
     try:
         return FitFile(file_path)
-    except IOError:
+    except (TypeError, IOError, OSError):
         return None
 
 class FitFileSeries:
@@ -19,7 +19,12 @@ class FitFileSeries:
         for fitfile in self.fitfiles:
             if fitfile is not None:
                 self._first_existing_fitfile = fitfile
-                break        
+                break
+                
+        try:
+            self._first_existing_fitfile
+        except AttributeError: 
+            raise ValueError("None of the provided fit files could be loaded")
         
         self._excluded_attributes = ["filename", "corfile", "software", "timestamp", "peaklist", "CCDdict"]    
     
@@ -44,7 +49,7 @@ class FitFileSeries:
         data_shape = (1,)
         if match_data_shape:
             attr_value =  getattr(self._first_existing_fitfile, attr)
-            if hasattr(attr_value, "shape"):
+            if hasattr(attr_value, "shape") and attr_value.shape != ():   # MODIFIED: avoid () scalar shapes
                 data_shape = attr_value.shape
             
         values = []
@@ -54,7 +59,22 @@ class FitFileSeries:
                     continue
                 values.append(np.full(data_shape, padding))
             else:
-                values.append(getattr(fitfile, attr))
+                val = getattr(fitfile, attr)                              # MODIFIED: store in variable
+                if match_data_shape:
+                    arr = np.asarray(val)                                 # MODIFIED: convert to array
+                    if arr.shape == ():                                   # MODIFIED: handle scalars
+                        arr = np.full(data_shape, arr)
+                    elif arr.shape != data_shape:                         # MODIFIED: try broadcast
+                        try:
+                            arr = np.broadcast_to(arr, data_shape).copy()
+                        except Exception as e:
+                            raise ValueError(
+                                f"Attribute '{attr}' has shape {arr.shape} "
+                                f"but cannot be broadcast to target shape {data_shape}."
+                            ) from e
+                    values.append(arr)                                    # MODIFIED: append normalized
+                else:
+                    values.append(val)                                    # unchanged
         
         if match_data_shape: # shapes of elements are the same, stacking allowed
             return np.stack(values)

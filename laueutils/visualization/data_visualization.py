@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 import matplotlib as mpl
 from scipy.optimize import curve_fit
 
-from graintools.classes import PeakList, FitFile, FitFileSeries
+from laueutils.classes.fitfileseries import FitFile, FitFileSeries
 from ._utils import draw_colorbar
 
 def __gaussian__(x, A, mu, sigma):
@@ -55,42 +55,42 @@ def display_image(image_path: str, ROI: tuple = None, **kwargs) -> None:
     ax.set_ylabel('Y pixel')
     ax.set_aspect('equal')    
 
-def plot_pattern(data_source, axis=None, **kwargs):
-    """Plot Laue pattern peak positions
+# def plot_pattern(data_source, axis=None, **kwargs):
+#     """Plot Laue pattern peak positions
     
-    Parameters
-    ----------
-    data_source: Can be
-                 * Full path to .dat file 
-                 * DatFile object
-                 * numpy.ndarray (n, 2) containing (x, y) positions as coloumns
+#     Parameters
+#     ----------
+#     data_source: Can be
+#                  * Full path to .dat file 
+#                  * DatFile object
+#                  * numpy.ndarray (n, 2) containing (x, y) positions as coloumns
                  
-    Keyword arguments
-    ----------
-    kwargs: passed to matplotlib.pyplot.scatter
-    """
-    if isinstance(data_source, str):
-        data = PeakList(data_source)
-        peaks_data = np.vstack((data.x_position, 
-                                data.y_position)).T
-    elif isinstance(data_source, PeakList):
-        peaks_data = np.vstack((data_source.x_position, 
-                                data_source.y_position)).T
-    elif isinstance(data_source, np.ndarray):
-        peaks_data = data_source
-    else:
-        raise ValueError(
-            f'Unrecognized data_source type. Type must be str or numpy.array, given {type(data_source)}'
-            )
+#     Keyword arguments
+#     ----------
+#     kwargs: passed to matplotlib.pyplot.scatter
+#     """
+#     if isinstance(data_source, str):
+#         data = PeakList(data_source)
+#         peaks_data = np.vstack((data.x_position, 
+#                                 data.y_position)).T
+#     elif isinstance(data_source, PeakList):
+#         peaks_data = np.vstack((data_source.x_position, 
+#                                 data_source.y_position)).T
+#     elif isinstance(data_source, np.ndarray):
+#         peaks_data = data_source
+#     else:
+#         raise ValueError(
+#             f'Unrecognized data_source type. Type must be str or numpy.array, given {type(data_source)}'
+#             )
     
-    if axis is None:
-        fig, axis = plt.subplots(figsize = (6,6))
-    axis.scatter(peaks_data[:,0], peaks_data[:,1], **kwargs)
-    axis.set_xlabel('X pixel')
-    axis.set_ylabel('Y pixel')
-    axis.set_aspect('equal')
-    axis.invert_yaxis()
-    print(f'Number of spots: {peaks_data.shape[0]}')
+#     if axis is None:
+#         fig, axis = plt.subplots(figsize = (6,6))
+#     axis.scatter(peaks_data[:,0], peaks_data[:,1], **kwargs)
+#     axis.set_xlabel('X pixel')
+#     axis.set_ylabel('Y pixel')
+#     axis.set_aspect('equal')
+#     axis.invert_yaxis()
+#     print(f'Number of spots: {peaks_data.shape[0]}')
 
 def plot_indexed_pattern(data_source, 
                          axis = None, 
