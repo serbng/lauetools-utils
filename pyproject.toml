@@ -24,12 +24,10 @@ dependencies = [
   "anywidget>=0.9"
 ]
 authors = [
-  { name = "Sergio Bongiorno", email = "sergiobng@proton.me" }
-]
-
-maintainers = [
+  { name = "Sergio Bongiorno", email = "sergiobng@proton.me" },   
   { name = "Beatriz G Foschiani", email = "beatrizgfoschiani@gmail.com" }
 ]
+
 
 [project.optional-dependencies]
 dev = [

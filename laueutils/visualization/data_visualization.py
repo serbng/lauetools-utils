@@ -4,7 +4,7 @@ import fabio
 import matplotlib.pyplot as plt
 import matplotlib as mpl
 from scipy.optimize import curve_fit
-
+from mpl_toolkits.axes_grid1.axes_divider import make_axes_locatable
 from laueutils.classes.fitfileseries import FitFile, FitFileSeries
 from ._utils import draw_colorbar
 
@@ -546,7 +546,8 @@ def strain_map(sample_x: np.ndarray,
         axes[axidx].set_aspect('equal')
         
     fig.tight_layout()
-    
+
+    return fig, axes
 
 def strain_histogram(ffs: FitFileSeries, 
                      multiplier: float = 1e4,

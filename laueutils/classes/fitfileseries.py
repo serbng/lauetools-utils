@@ -7,7 +7,7 @@ from . import FitFile
 def _parse_fitfile(file_path):
     try:
         return FitFile(file_path)
-    except (TypeError, IOError, OSError):
+    except (TypeError, IOError, OSError):  # MODIFIED: (TypeError, IOError, OSError)
         return None
 
 class FitFileSeries:
@@ -26,69 +26,90 @@ class FitFileSeries:
         except AttributeError: 
             raise ValueError("None of the provided fit files could be loaded")
         
-        self._excluded_attributes = ["filename", "corfile", "software", "timestamp", "peaklist", "CCDdict"]    
+        #self._excluded_attributes = ["filename", "corfile", "software", "timestamp", "peaklist", "CCDdict"]    
     
-    def _collect(self, attr, match_length=True, match_data_shape=True, padding=np.nan):
-        """Go through each fit file and retrieve the value 
-
-        Args:
-            attr (str): name of the attribute of the FitFile class
-            match_length (bool, optional): Where the fit file doesn't exist, put "padding" to match the length of the output to the number of fit files. Defaults to True.
-            match_data_shape (bool, optional): Where the fit file doesn't exist, put a numpy array with the shape that the attribute is supposed to have and fill it with "padding". Defaults to True.
-            padding (float, optional): Value to use for the padding. Defaults to np.nan.
-
-        Raises:
-            AttributeError: When attr is not an attribute of class FitFile
-
-        Returns:
-            result (numpy.ndarray | list): Array containing the result if match_data_shape=True, else a list.
+    def _collect(self, attr, padding=np.nan):
         """
-        if attr not in self._first_existing_fitfile.__dict__.keys():
-            raise AttributeError(f"Attribute not in FitFile object")
-        
-        data_shape = (1,)
-        if match_data_shape:
-            attr_value =  getattr(self._first_existing_fitfile, attr)
-            if hasattr(attr_value, "shape") and attr_value.shape != ():   # MODIFIED: avoid () scalar shapes
-                data_shape = attr_value.shape
-            
-        values = []
-        for fitfile in self.fitfiles:
-            if fitfile is None:
-                if not match_length:
-                    continue
-                values.append(np.full(data_shape, padding))
-            else:
-                val = getattr(fitfile, attr)                              # MODIFIED: store in variable
-                if match_data_shape:
-                    arr = np.asarray(val)                                 # MODIFIED: convert to array
-                    if arr.shape == ():                                   # MODIFIED: handle scalars
-                        arr = np.full(data_shape, arr)
-                    elif arr.shape != data_shape:                         # MODIFIED: try broadcast
-                        try:
-                            arr = np.broadcast_to(arr, data_shape).copy()
-                        except Exception as e:
-                            raise ValueError(
-                                f"Attribute '{attr}' has shape {arr.shape} "
-                                f"but cannot be broadcast to target shape {data_shape}."
-                            ) from e
-                    values.append(arr)                                    # MODIFIED: append normalized
-                else:
-                    values.append(val)                                    # unchanged
-        
-        if match_data_shape: # shapes of elements are the same, stacking allowed
-            return np.stack(values)
-        
-        # List of values, will have different shapes
-        return values
+        Gather `attr` from each FitFile in `self.fitfiles`.
     
+        Returns
+        -------
+        np.ndarray
+            If values are numeric:
+              - scalar attribute  -> shape (N,)
+              - array attribute   -> shape (N, *target_shape)
+        list
+            If values are non-numeric, returns a Python list (with None
+            for missing fitfiles).
+        """
+        # Validate attribute existence on the first valid FitFile
+        if attr not in self._first_existing_fitfile.__dict__:
+            raise AttributeError(f"Attribute '{attr}' not in FitFile object.")
+    
+        sample_val = getattr(self._first_existing_fitfile, attr)
+        sample_arr = np.asarray(sample_val)
+        is_numeric = (sample_arr.dtype != object) and np.issubdtype(sample_arr.dtype, np.number)
+    
+        if is_numeric:
+            # --- numeric path ---
+            if sample_arr.shape == ():
+                # Scalar case -> 1D array (N,)
+                out_vals = []
+                for ff in self.fitfiles:
+                    if ff is None:
+                        out_vals.append(padding)
+                    else:
+                        val = getattr(ff, attr)
+                        arr = np.asarray(val)
+                        if arr.shape != ():
+                            raise ValueError(
+                                f"Attribute '{attr}' expected scalar (), got {arr.shape}."
+                            )
+                        # Extract scalar (arr.item() handles numpy scalars cleanly)
+                        out_vals.append(arr.item())
+                return np.asarray(out_vals)
+    
+            else:
+                # Array case -> stack to (N, *target_shape)
+                target_shape = sample_arr.shape
+                out_arrays = []
+                for ff in self.fitfiles:
+                    if ff is None:
+                        out_arrays.append(np.full(target_shape, padding))
+                    else:
+                        arr = np.asarray(getattr(ff, attr))
+                        if arr.shape != target_shape:
+                            raise ValueError(
+                                f"Attribute '{attr}' expected shape {target_shape}, "
+                                f"got {arr.shape}."
+                            )
+                        out_arrays.append(arr)
+                return np.stack(out_arrays)
+    
+        else:
+            # --- non-numeric path -> list with None for missing ---
+            out = []
+            for ff in self.fitfiles:
+                out.append(None if ff is None else getattr(ff, attr))
+            return out
+        
     @property
     def number_indexed_spots(self):
-        return self._collect("number_indexed_spots")
+        return self._collect("number_indexed_spots") # MODIFIED: flatten (n,) instead of (n,1)
 
     @property
     def mean_pixel_deviation(self):
-        return self._collect("mean_pixel_deviation")
+        return self._collect("mean_pixel_deviation") # MODIFIED: flatten (n,) instead of (n,1)
+
+
+    @property
+    def boa(self):
+        return self._collect("boa")
+
+    @property
+    def coa(self):
+        return self._collect("coa")
+    
     
     @property
     def euler_angles(self):
@@ -141,7 +162,7 @@ class FitFileSeries:
     @property
     def cstar_prime(self):
         return self._collect("cstar_prime")
-    
+
     def track_hkl(self, h: int, k: int, l: int) -> pd.DataFrame:
         """_summary_
 
