@@ -60,7 +60,7 @@ pip install -e .
 
 Select the lauetools-utils kernel on Jupyter Notebook and run this cell
 
-```bash
+```python
 import numpy, scipy, matplotlib, h5py, fabio
 import laueutils, laueutils.peaks as peaks
 print("✅ Environment + laueutils import OK")
