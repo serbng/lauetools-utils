@@ -1,6 +1,3 @@
-
-## OPEN THIS FILE USING "Open With -> Markdown Preview !!! "
-
 ---
 # lauetools-utils – Reproducible Setup via `environment.yml`
 
