@@ -27,7 +27,9 @@ authors = [
   { name = "Sergio Bongiorno", email = "sergiobng@proton.me" },   
   { name = "Beatriz G Foschiani", email = "beatrizgfoschiani@gmail.com" }
 ]
-
+maintainers = [
+  { name = "Beatriz G Foschiani", email = "beatrizgfoschiani@gmail.com" }
+]
 
 [project.optional-dependencies]
 dev = [
