@@ -15,7 +15,7 @@ def plotfluoh5(h5path: str,
                sample_x: np.ndarray, 
                sample_y: np.ndarray,
                normalize: bool = True, 
-               size: tuple = (10, 5), 
+               figsize: tuple = None, 
                scale: str = 'mean2sigma', 
                file_indices: tuple = None,
                reshape_order: str = 'F',
@@ -65,9 +65,8 @@ def plotfluoh5(h5path: str,
     matplotlib.axes.Axes
         The axis containing the plot.
     """
-    
-    sci_notation = kwargs.pop('sci_notation', False)
-    cbar_size = kwargs.pop('cbar_size', '10%')
+    cbar_width   = kwargs.pop('cbar_width', 5)
+
 
     with h5py.File(h5path, 'r') as h5f:
         # Load fluorescence data and normalize if needed
@@ -106,9 +105,7 @@ def plotfluoh5(h5path: str,
     else:
         raise ValueError("scale must be in ['default', 'meanNsigma', 'other']")
     
-    fig, ax = plt.subplots()
-    fig.set_size_inches(size[0], size[1])
-
+    fig, ax = plt.subplots(figsize=figsize)
     im = ax.pcolormesh(sample_x, sample_y, 
                         data.reshape(sample_x.shape, order=reshape_order),
                         vmin=plotvmin, vmax=plotvmax, **kwargs)
@@ -117,7 +114,8 @@ def plotfluoh5(h5path: str,
     ax.set_ylabel('Position [µm]')
     ax.set_aspect('equal')
     
-    draw_colorbar(im, ax, cbar_size, sci_notation)
+    
+    draw_colorbar(im, width = cbar_width)
     #fig.tight_layout()
     
     return data, fig, ax
@@ -133,7 +131,7 @@ def plotxeolh5(h5path: str,
                pathref: str = None, 
                ref_range: tuple = None, 
                normalize: bool = True, 
-               size: tuple = (10, 5), 
+               figsize: tuple = None, 
                scale: str = 'mean2sigma', 
                reshape_order: str = 'F',
                sci_notation=False,
@@ -191,7 +189,7 @@ def plotxeolh5(h5path: str,
         The axis containing the plot.
     """
     sci_notation = kwargs.pop('sci_notation', False)
-    cbar_size = kwargs.pop('cbar_size', '10%')
+    cbar_width = kwargs.pop('cbar_width', 5)
 
     if channel is None and roi is None:
         raise TypeError("'channel' (int) or 'roi' (tuple) need to be provided")
@@ -243,8 +241,7 @@ def plotxeolh5(h5path: str,
     else:
         raise ValueError("scale must be in ['default', 'meanNsigma', 'other']")
     
-    fig, ax = plt.subplots()
-    fig.set_size_inches(size[0], size[1])
+    fig, ax = plt.subplots(figsize=figsize)
     im = ax.pcolormesh(sample_x, sample_y, data.reshape(sample_x.shape, order=reshape_order),
                         vmin=plotvmin, vmax=plotvmax, **kwargs)
     
@@ -257,7 +254,7 @@ def plotxeolh5(h5path: str,
     else:
         ax.set_title(f'{wavelen:.0f} nm')
     
-    draw_colorbar(im, ax, cbar_size, sci_notation)
+    draw_colorbar(im, width=cbar_width)
     
     return data, fig, ax
 
