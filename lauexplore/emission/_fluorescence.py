@@ -47,8 +47,8 @@ class Fluorescence:
             raise ValueError("scan must not be None.")
         
         z = plots.base._as_grid(self.data, self.scan)
-        x = np.arange(self.scan.nbxpoints)
-        y = np.arange(self.scan.nbypoints)
+        x = self.scan.xpoints * 1e3
+        y = self.scan.ypoints * 1e3
         
         customdata, hovertemplate = plots.scan_hovermenu(self.scan)
         
@@ -60,7 +60,7 @@ class Fluorescence:
             height = height,
             zmin = zmin,
             zmax = zmax,
-            title = title or f"Fluorescence plot – {self.material} ({self.scan.nbxpoints} × {self.scan.nbxpoints})",
+            title = title or f"Fluorescence plot – {self.material} ({self.scan.xpoints} × {self.scan.ypoints})",
             xlabel = xlabel,
             ylabel = ylabel,
             colorscale = colorscale,

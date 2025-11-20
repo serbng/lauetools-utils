@@ -125,8 +125,8 @@ class XEOL:
 
         # Convert to grid
         z = plots.base._as_grid(self.data, self.scan)
-        x = np.arange(self.scan.nbxpoints)
-        y = np.arange(self.scan.nbypoints)
+        x = self.scan.xpoints * 1e3
+        y = self.scan.ypoints * 1e3
 
         customdata, hover = plots.scan_hovermenu(self.scan)
 
@@ -189,8 +189,8 @@ class XEOL:
             )
 
         wl = self.wl_array  # (Nchannels,)
-        x = np.arange(self.scan.nbxpoints)
-        y = np.arange(self.scan.nbypoints)
+        x = self.scan.xpoints * 1e3
+        y = self.scan.ypoints * 1e3
         customdata, hover = plots.scan_hovermenu(self.scan)
 
         # -----------------------------
