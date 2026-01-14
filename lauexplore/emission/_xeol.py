@@ -3,35 +3,36 @@ from pathlib import Path
 import numpy as np
 import h5py
 
-from ipywidgets import IntRangeSlider, VBox, Output
-
+from ipywidgets import IntRangeSlider, IntSlider, VBox
 import plotly.graph_objects as go
+from plotly.subplots import make_subplots
 
 from lauexplore.scan import Scan
 from lauexplore import plots
 from lauexplore._parsers import _h5
+
 
 @dataclass
 class XEOL:
     """
     Container for analyzing and plotting visible-light emission (XEOL).
 
-    Supports:
-    - selecting a single spectral channel
-    - summing over a Region Of Interest (roi = (start, end))
-    - interactive wavelength slider to choose ROI in nm
+    All spectral parameters are given in wavelength (nm):
 
-    The interface mirrors the Fluorescence class for consistency.
+    - channel : wavelength (nm) of interest
+    - roi     : (start_nm, end_nm) to integrate
+    - ref_data : can be range inside each spectro (start_nm, end_nm) where the mean value of this range 
+                will be used for subtraction or a given value (float) for directly subtration
     """
 
-    spectra: np.ndarray          # full spectra per scan point (Npoints, Nchannels)
-    data: np.ndarray             # extracted intensity (1D flattened)
-    wavelength: float | tuple[float, float] | None
+    spectra: np.ndarray                 # (Npoints, Nchannels)
     scan: Scan
-    wl_array: np.ndarray | None = None
-    channel: int | None = None
-    roi: tuple[int, int] | None = None
+    wl_array: np.ndarray  # (Nchannels,)
+    channel: float | None = None        # always in nm
+    roi: tuple[float, float] | None = None  # always in nm
+    wavelength: float | tuple[float, float] | None = None
     normalize_to_monitor: bool = True
+    data: np.ndarray | None = None
 
     # ------------------------------------------------------------------
     @classmethod
@@ -40,67 +41,76 @@ class XEOL:
         filepath: str | Path,
         scan_number: int = 1,
         *,
-        channel: int | None = None,
-        roi: tuple[int, int] | None = None,
+        channel: float | None = None,             # nm
+        roi: tuple[float, float] | None = None,   # nm
         normalize_to_monitor: bool = True,
         ref_path: str | None = None,
-        ref_range: tuple[int, int] | None = None,
+        ref_data: tuple[int, int] | int | float | None = None,  # nm
     ) -> "XEOL":
 
         if channel is None and roi is None:
-            raise ValueError("Provide either a spectral `channel` or a `roi=(start,end)`.")
+            raise ValueError("Provide either a spectral `channel` (nm) or a `roi=(start_nm,end_nm)`.")
 
         filepath = Path(filepath)
 
-        # -- Load scan info ----------------------------------------
+        # --- scan info ---
         scan = Scan.from_h5(filepath, scan_number)
         mon = scan.monitor_data
 
         with h5py.File(filepath, "r") as h5f:
+            # raw spectra (Npoints, Nchannels)
+            spectra = np.array(_h5.get_xeol(h5f, scan_number))
 
-            # Load raw spectra (Npoints, Nchannels)
-            spectra = _h5.get_xeol(h5f, scan_number)
-
-            # Reference subtraction
-            if ref_path is not None:
-                ref = h5f[ref_path][0]
-            elif ref_range is not None:
-                ref = np.mean(spectra[:, ref_range[0]:ref_range[1]])
-            else:
-                ref = 0.0
-
-            spectra = spectra - ref
-
-            # Load wavelength calibration
+            # wavelength calibration (nm)
             wl_array = h5f[f"{scan_number}.1/measurement/qepro_det1"][0]
 
-        # -----------------------------------------------------------
-        # Extract intensity (channel or ROI)
-        # -----------------------------------------------------------
+            # --- reference subtraction ---
+            if ref_path is not None:
+                ref = h5f[ref_path][0]
 
+            elif isinstance(ref_data, tuple):
+                start_ref, end_ref = ref_data
+                ref_idx0 = int(np.abs(wl_array - start_ref).argmin())
+                ref_idx1 = int(np.abs(wl_array - end_ref).argmin())
+                # mean over reference window, per scan point
+                ref = np.mean(spectra[:, ref_idx0:ref_idx1], axis=1)[:, None]
+                
+            elif isinstance(ref_data, (int,float)): 
+                ref = ref_data
+
+            else:
+                ref = 0
+                
+            spectra = spectra - ref
+            spectra = np.where(spectra < 0, 0, spectra)
+
+        # --- extract intensity for mapping ---
         if roi is not None:
-            start, end = roi
-            data = np.sum(spectra[:, start:end+1], axis=1)
-            wavelength = (wl_array[start], wl_array[end])
+            start_nm, end_nm = roi
+            idx0 = int(np.abs(wl_array - start_nm).argmin())
+            idx1 = int(np.abs(wl_array - end_nm).argmin())
+            data = np.sum(spectra[:, idx0:idx1 + 1], axis=1)
+            wavelength = (start_nm, end_nm)
         else:
-            data = spectra[:, channel]
-            wavelength = wl_array[channel]
+            idx = int(np.abs(wl_array - channel).argmin())
+            data = spectra[:, idx]
+            wavelength = wl_array[idx]
 
-        # Normalize
         if normalize_to_monitor:
-            data = data / mon
+            data = data*1e5 / mon
 
         return cls(
             spectra=spectra,
-            data=data,
             wavelength=wavelength,
             wl_array=wl_array,
             scan=scan,
             channel=channel,
             roi=roi,
             normalize_to_monitor=normalize_to_monitor,
+            data = data
         )
 
+    # ------------------------------------------------------------------
     def plot(
         self,
         *,
@@ -123,7 +133,6 @@ class XEOL:
             else:
                 title = f"XEOL {self.wavelength:.0f} nm"
 
-        # Convert to grid
         z = plots.base._as_grid(self.data, self.scan)
         x = self.scan.xpoints * 1e3
         y = self.scan.ypoints * 1e3
@@ -148,7 +157,7 @@ class XEOL:
         return fig
 
     # ------------------------------------------------------------------
-    # INTERACTIVE SLIDER PLOT (nm range)
+    # INTERACTIVE: ipywidgets + FigureWidget (rápido e estável)
     # ------------------------------------------------------------------
 
     def interactive_plot(
@@ -166,38 +175,93 @@ class XEOL:
         cbartitle: str | None = None,
     ):
         """
-        Interactive XEOL ROI selection using a wavelength slider (nm).
-        Parameters forwarded to heatmap():
-        ---------------------------------------------------
-        width : int
-        height : int
-        zmin, zmax : float or None
-        title : str or None
-        xlabel, ylabel : str or None
-        colorscale : str
-        log10 : bool
-        cbartitle : str or None
+        Interactive XEOL visualization (Jupyter):
+
+        - IntRangeSlider (λ in nm) controla o ROI → atualiza apenas o mapa.
+        - IntSlider (point index) controla o espectro → atualiza apenas o trace de espectro.
+        - Usa go.FigureWidget para atualizar em tempo real, sem recriar a figura.
         """
 
         if self.scan is None:
             raise ValueError("scan must not be None.")
+        if self.wl_array is None:
+            raise ValueError("XEOL object has no wavelength calibration (`wl_array`).")
 
-        if not hasattr(self, "wl_array") or self.wl_array is None:
-            raise ValueError(
-                "XEOL object has no wavelength calibration (`wl_array`). "
-                "Provide it manually or use XEOL.from_h5()."
-            )
-
-        wl = self.wl_array  # (Nchannels,)
+        wl = self.wl_array
         x = self.scan.xpoints * 1e3
         y = self.scan.ypoints * 1e3
         customdata, hover = plots.scan_hovermenu(self.scan)
 
-        # -----------------------------
-        # Slider in wavelength (nm)
-        # -----------------------------
-        slider = IntRangeSlider(
-            value=[int(wl.min()), int(wl.min()) + 50],
+        # ----- initial ROI in nm -----
+        if self.roi is not None:
+            init_w0, init_w1 = self.roi
+        else:
+            init_w0 = init_w1 = float(self.channel)
+
+        idx0_init = int(np.abs(wl - init_w0).argmin())
+        idx1_init = int(np.abs(wl - init_w1).argmin())
+
+        z_flat_init = np.sum(self.spectra[:, idx0_init:idx1_init + 1], axis=1)
+        if self.normalize_to_monitor:
+            z_flat_init = z_flat_init / self.scan.monitor_data
+        z_init = plots.base._as_grid(z_flat_init, self.scan)
+
+        # ----- build figure once (FigureWidget) -----
+        base_fig = make_subplots(
+            rows=1,
+            cols=2,
+            column_widths=[0.55, 0.45],
+            subplot_titles=[
+                (title if title is not None else f"XEOL {init_w0:.0f}–{init_w1:.0f} nm"),
+                "Spectrum",
+            ],
+        )
+
+        fig = go.FigureWidget(base_fig)
+
+        # LEFT: heatmap (um único trace)
+        heatmap_fig = plots.base.heatmap(
+            z_init,
+            x,
+            y,
+            customdata=customdata,
+            hovertemplate=hover,
+            width=width // 2,
+            height=height,
+            zmin=zmin,
+            zmax=zmax,
+            title=None,
+            xlabel=xlabel,
+            ylabel=ylabel,
+            colorscale=colorscale,
+            log10=log10,
+            cbartitle=cbartitle,
+        )
+        for tr in heatmap_fig.data:
+            fig.add_trace(tr, row=1, col=1)
+            self.data = tr.z.ravel()
+
+        # guarda referência ao trace de mapa (assumindo 1 trace do heatmap)
+        heat_trace = fig.data[0]
+        
+
+        # RIGHT: spectrum trace
+        spec_trace = go.Scatter(
+            x=wl,
+            y=self.spectra[0, :],
+            mode="lines",
+            name=None,
+        )
+        fig.add_trace(spec_trace, row=1, col=2)
+
+        fig.update_xaxes(title_text="Wavelength (nm)", row=1, col=2)
+        fig.update_yaxes(title_text="Intensity (a.u.)", row=1, col=2)
+        fig.update_layout(width=width, height=height)
+        
+
+        # ----- sliders -----
+        slider_roi = IntRangeSlider(
+            value=[int(init_w0), int(init_w1)],
             min=int(wl.min()),
             max=int(wl.max()),
             step=1,
@@ -206,59 +270,40 @@ class XEOL:
             layout={'width': '700px'},
         )
 
-        out = Output()
+        slider_idx = IntSlider(
+            value=0,
+            min=0,
+            max=self.spectra.shape[0] - 1,
+            step=1,
+            description="Point index",
+            continuous_update=True,
+            layout={'width': '400px'},
+        )
 
-        # -----------------------------
-        # Update function
-        # -----------------------------
-        def update_plot(change):
-            with out:
-                out.clear_output()
+        # ----- callbacks -----
 
-                # Slider → wavelength range (nm)
-                w0, w1 = slider.value
-                idx0 = np.argmin(np.abs(wl - w0))
-                idx1 = np.argmin(np.abs(wl - w1))
+        def on_roi_change(change):
+            w0, w1 = slider_roi.value
+            idx0 = int(np.abs(wl - w0).argmin())
+            idx1 = int(np.abs(wl - w1).argmin())
 
-                # Integrate spectra in ROI
-                z_flat = np.sum(self.spectra[:, idx0:idx1+1], axis=1)
+            z_flat = np.sum(self.spectra[:, idx0:idx1 + 1], axis=1)
+            if self.normalize_to_monitor:
+                z_flat = z_flat / self.scan.monitor_data
+            z_new = plots.base._as_grid(z_flat, self.scan)
 
-                if self.normalize_to_monitor:
-                    z_flat = z_flat / self.scan.monitor_data
+            # atualiza somente o mapa
+            heat_trace.z = z_new
+            fig.layout.annotations[0].text = f"XEOL {w0:.0f}–{w1:.0f} nm"
 
-                # Reshape to 2D
-                z = plots.base._as_grid(z_flat, self.scan)
+        def on_index_change(change):
+            idx = slider_idx.value
+            new_y = self.spectra[idx, :]
 
-                # Auto title if user didn't pass one
-                dynamic_title = (
-                    title if title is not None
-                    else f"XEOL {w0:.0f}–{w1:.0f} nm"
-                )
+            fig.data[-1].y = new_y
+            fig.layout.annotations[1].text = f"Spectrum {idx}"
 
-                fig = plots.base.heatmap(
-                    z,
-                    x,
-                    y,
-                    customdata=customdata,
-                    hovertemplate=hover,
-                    width=width,
-                    height=height,
-                    zmin=zmin,
-                    zmax=zmax,
-                    title=dynamic_title,
-                    xlabel=xlabel,
-                    ylabel=ylabel,
-                    colorscale=colorscale,
-                    log10=log10,
-                    cbartitle=cbartitle,
-                )
+        slider_roi.observe(on_roi_change, names="value")
+        slider_idx.observe(on_index_change, names="value")
 
-                fig.show()
-
-        # -----------------------------
-        # Connect slider + initial draw
-        # -----------------------------
-        slider.observe(update_plot, names="value")
-        update_plot(None)
-
-        return VBox([slider, out])
+        return VBox([slider_roi, slider_idx, fig])

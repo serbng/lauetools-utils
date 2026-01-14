@@ -48,7 +48,7 @@ cover/
 
 # Jupyter Notebook
 .ipynb_checkpoints
-
+.ipynb
 *__pycache__*
 
 # IPython
