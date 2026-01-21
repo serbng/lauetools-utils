@@ -60,7 +60,7 @@ class Fluorescence:
             height = height,
             zmin = zmin,
             zmax = zmax,
-            title = title or f"Fluorescence plot – {self.material} ({self.scan.xpoints} × {self.scan.ypoints})",
+            title = title or f"Fluorescence plot – {self.material} ({self.scan.nbxpoints} × {self.scan.nbxpoints})",
             xlabel = xlabel,
             ylabel = ylabel,
             colorscale = colorscale,
