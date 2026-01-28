@@ -2,6 +2,7 @@ import numpy as np
 from pandas import DataFrame
 
 from lauexplore._utils.strings import clean_string, remove_newline
+from lauexplore.plots.base import indexation as indexation_plot
 character_list = ["[", "]", "\n", "#"]
 
 
@@ -468,4 +469,4 @@ y_center: {self.CCDdict["DetectorParameters"][2]:7.2f} [px]
 """)
     
     def plot(self):
-        plot_indexation(self.peaklist)
+        indexation_plot(self.peaklist)
