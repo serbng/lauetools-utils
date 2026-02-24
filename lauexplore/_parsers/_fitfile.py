@@ -212,6 +212,7 @@ file_entries = {
     "spot_index intensity h k l 2theta Chi Xexp Yexp Energy GrainIndex PixDev": read_peaks_data,
     "spot_index Intensity h k l pixDev energy(keV) Xexp Yexp 2theta_exp chi_exp Xtheo Ytheo 2theta_theo chi_theo Qx Qy Qz": read_peaks_data,
     "spot_index Intensity h k l pixDev energy(keV) Xexp Yexp 2theta_exp chi_exp Xtheo Ytheo 2theta_theo chi_theo Qx Qy Qz grainindex": read_peaks_data,
+    "spot_index Intensity h k l pixDev energy(keV) Xexp Yexp 2theta_exp chi_exp Xtheo Ytheo 2theta_theo chi_theo Qx Qy Qz 2theta chi X Y I peak_X peak_Y peak_Itot peak_Isub peak_fwaxmaj peak_fwaxmin peak_inclination Xdev Ydev peak_bkg Ipixmax Xfiterr Yfiterr": read_peaks_data,
     "UB matrix in q= (UB) B0 G* ": read_UB,
     "B0 matrix in q= UB (B0) G*": read_B0,
     "UBB0 matrix in q= (UB B0) G* i.e. recip. basis vectors are columns in LT frame: astar = UBB0[:,0], bstar = UBB0[:,1], cstar = UBB0[:,2]. (abcstar as columns on xyzlab1, xlab1 = ui, ui = unit vector along incident beam)": read_UBB0,
@@ -248,7 +249,27 @@ dataframe_name = {
     "Qy": "Qy",
     "Qz": "Qz",
     "grainindex": "grain idx",
-    "GrainIndex": "grain idx"
+    "GrainIndex": "grain idx",
+    # corfile columns
+    "2theta": "2theta",
+    "chi": "chi",
+    "X": "X",
+    "Y": "Y",
+    "I": "I",
+    # peaksearch columns
+    "peak_X": "peak_X",
+    "peak_Y": "peak_Y",
+    "peak_Itot": "peak_Itot",
+    "peak_Isub": "peak_Isub",
+    "peak_fwaxmaj": "FWHM_maj",
+    "peak_fwaxmin": "FWHM_min",
+    "peak_inclination": "inclination",
+    "Xdev": "Xdev",
+    "Ydev": "Ydev",
+    "peak_bkg": "peak_bkg",
+    "Ipixmax": "Ipixmax",
+    "Xfiterr": "Xfiterr",
+    "Yfiterr": "Yfiterr"
 }
     
 # ========================= Functions to parse the entire file ========================
