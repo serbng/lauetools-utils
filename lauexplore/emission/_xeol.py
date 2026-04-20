@@ -32,6 +32,7 @@ class XEOL:
     roi: tuple[float, float] | None = None  # always in nm
     wavelength: float | tuple[float, float] | None = None
     normalize_to_monitor: bool = True
+    norm_zone: tuple[float, float] | None = None
     data: np.ndarray | None = None
 
     # ------------------------------------------------------------------
@@ -44,6 +45,7 @@ class XEOL:
         channel: float | None = None,             # nm
         roi: tuple[float, float] | None = None,   # nm
         normalize_to_monitor: bool = True,
+        norm_zone: tuple[float, float] | None = None,  # nm
         ref_path: str | None = None,
         ref_data: tuple[int, int] | int | float | None = None,  # nm
     ) -> "XEOL":
@@ -97,7 +99,14 @@ class XEOL:
             wavelength = wl_array[idx]
 
         if normalize_to_monitor:
-            data = data*1e5 / mon
+            data = data * 1e5 / mon
+
+        if norm_zone is not None:
+            z0, z1 = norm_zone
+            i0 = int(np.abs(wl_array - z0).argmin())
+            i1 = int(np.abs(wl_array - z1).argmin())
+            dead_map = np.sum(spectra[:, i0:i1 + 1], axis=1)
+            data = data / dead_map
 
         return cls(
             spectra=spectra,
@@ -107,7 +116,8 @@ class XEOL:
             channel=channel,
             roi=roi,
             normalize_to_monitor=normalize_to_monitor,
-            data = data
+            norm_zone=norm_zone,
+            data=data,
         )
 
     # ------------------------------------------------------------------
@@ -204,6 +214,12 @@ class XEOL:
         z_flat_init = np.sum(self.spectra[:, idx0_init:idx1_init + 1], axis=1)
         if self.normalize_to_monitor:
             z_flat_init = z_flat_init / self.scan.monitor_data
+        if self.norm_zone is not None:
+            z0, z1 = self.norm_zone
+            i0 = int(np.abs(wl - z0).argmin())
+            i1 = int(np.abs(wl - z1).argmin())
+            dead_map = np.sum(self.spectra[:, i0:i1 + 1], axis=1)
+            z_flat_init = z_flat_init / dead_map
         z_init = plots.base._as_grid(z_flat_init, self.scan)
 
         # ----- build figure once (FigureWidget) -----
@@ -239,7 +255,6 @@ class XEOL:
         )
         for tr in heatmap_fig.data:
             fig.add_trace(tr, row=1, col=1)
-            self.data = tr.z.ravel()
 
         # guarda referência ao trace de mapa (assumindo 1 trace do heatmap)
         heat_trace = fig.data[0]
@@ -256,6 +271,8 @@ class XEOL:
 
         fig.update_xaxes(title_text="Wavelength (nm)", row=1, col=2)
         fig.update_yaxes(title_text="Intensity (a.u.)", row=1, col=2)
+        fig.update_xaxes(constrain="domain", row=1, col=1)
+        fig.update_yaxes(scaleanchor="x", scaleratio=1, constrain="domain", row=1, col=1)
         fig.update_layout(width=width, height=height)
         
 
@@ -290,6 +307,12 @@ class XEOL:
             z_flat = np.sum(self.spectra[:, idx0:idx1 + 1], axis=1)
             if self.normalize_to_monitor:
                 z_flat = z_flat / self.scan.monitor_data
+            if self.norm_zone is not None:
+                z0, z1 = self.norm_zone
+                i0 = int(np.abs(wl - z0).argmin())
+                i1 = int(np.abs(wl - z1).argmin())
+                dead_map = np.sum(self.spectra[:, i0:i1 + 1], axis=1)
+                z_flat = z_flat / dead_map
             z_new = plots.base._as_grid(z_flat, self.scan)
 
             # atualiza somente o mapa
