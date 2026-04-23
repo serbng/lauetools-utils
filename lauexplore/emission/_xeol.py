@@ -35,6 +35,39 @@ class XEOL:
     norm_zone: tuple[float, float] | None = None
     data: np.ndarray | None = None
 
+    def __post_init__(self):
+        if self.data is not None:
+            return
+        if self.roi is None and self.channel is None:
+            return
+
+        wl = self.wl_array
+
+        if self.roi is not None:
+            start_nm, end_nm = self.roi
+            idx0 = int(np.abs(wl - start_nm).argmin())
+            idx1 = int(np.abs(wl - end_nm).argmin())
+            data = np.sum(self.spectra[:, idx0:idx1 + 1], axis=1)
+            if self.wavelength is None:
+                self.wavelength = self.roi
+        else:
+            idx = int(np.abs(wl - self.channel).argmin())
+            data = self.spectra[:, idx].copy()
+            if self.wavelength is None:
+                self.wavelength = float(wl[idx])
+
+        if self.normalize_to_monitor:
+            data = data * 1e5 / self.scan.monitor_data
+
+        if self.norm_zone is not None:
+            z0, z1 = self.norm_zone
+            i0 = int(np.abs(wl - z0).argmin())
+            i1 = int(np.abs(wl - z1).argmin())
+            dead_map = np.sum(self.spectra[:, i0:i1 + 1], axis=1)
+            data = data / dead_map
+
+        self.data = data
+
     # ------------------------------------------------------------------
     @classmethod
     def from_h5(
@@ -128,6 +161,7 @@ class XEOL:
         height: int = 600,
         zmin: float | None = None,
         zmax: float | None = None,
+        percentile: float = 0.1,
         title: str | None = None,
         xlabel: str | None = None,
         ylabel: str | None = None,
@@ -144,6 +178,10 @@ class XEOL:
                 title = f"XEOL {self.wavelength:.0f} nm"
 
         z = plots.base._as_grid(self.data, self.scan)
+        if zmin is None:
+            zmin = float(np.nanpercentile(self.data, percentile))
+        if zmax is None:
+            zmax = float(np.nanpercentile(self.data, 100 - percentile))
         x = self.scan.xpoints * 1e3
         y = self.scan.ypoints * 1e3
 
@@ -177,6 +215,7 @@ class XEOL:
         height: int = 500,
         zmin: float | None = None,
         zmax: float | None = None,
+        percentile: float = 2,
         title: str | None = None,
         xlabel: str | None = None,
         ylabel: str | None = None,
@@ -221,16 +260,27 @@ class XEOL:
             dead_map = np.sum(self.spectra[:, i0:i1 + 1], axis=1)
             z_flat_init = z_flat_init / dead_map
         z_init = plots.base._as_grid(z_flat_init, self.scan)
+        zmin_auto = zmin is None
+        zmax_auto = zmax is None
+        if zmin_auto:
+            zmin = float(np.nanpercentile(z_flat_init, percentile))
+        if zmax_auto:
+            zmax = float(np.nanpercentile(z_flat_init, 100 - percentile))
 
         # ----- build figure once (FigureWidget) -----
+        if title is None:
+            if self.roi is not None:
+                auto_title = f"XEOL {init_w0:.0f}–{init_w1:.0f} nm"
+            else:
+                auto_title = f"XEOL {init_w0:.0f} nm"
+        else:
+            auto_title = title
+
         base_fig = make_subplots(
             rows=1,
             cols=2,
             column_widths=[0.55, 0.45],
-            subplot_titles=[
-                (title if title is not None else f"XEOL {init_w0:.0f}–{init_w1:.0f} nm"),
-                "Spectrum",
-            ],
+            subplot_titles=[auto_title, "Spectrum"],
         )
 
         fig = go.FigureWidget(base_fig)
@@ -277,16 +327,6 @@ class XEOL:
         
 
         # ----- sliders -----
-        slider_roi = IntRangeSlider(
-            value=[int(init_w0), int(init_w1)],
-            min=int(wl.min()),
-            max=int(wl.max()),
-            step=1,
-            description="λ (nm)",
-            continuous_update=False,
-            layout={'width': '700px'},
-        )
-
         slider_idx = IntSlider(
             value=0,
             min=0,
@@ -297,14 +337,7 @@ class XEOL:
             layout={'width': '400px'},
         )
 
-        # ----- callbacks -----
-
-        def on_roi_change(change):
-            w0, w1 = slider_roi.value
-            idx0 = int(np.abs(wl - w0).argmin())
-            idx1 = int(np.abs(wl - w1).argmin())
-
-            z_flat = np.sum(self.spectra[:, idx0:idx1 + 1], axis=1)
+        def _apply_norm(z_flat):
             if self.normalize_to_monitor:
                 z_flat = z_flat / self.scan.monitor_data
             if self.norm_zone is not None:
@@ -313,20 +346,61 @@ class XEOL:
                 i1 = int(np.abs(wl - z1).argmin())
                 dead_map = np.sum(self.spectra[:, i0:i1 + 1], axis=1)
                 z_flat = z_flat / dead_map
-            z_new = plots.base._as_grid(z_flat, self.scan)
+            return z_flat
 
-            # atualiza somente o mapa
-            heat_trace.z = z_new
-            fig.layout.annotations[0].text = f"XEOL {w0:.0f}–{w1:.0f} nm"
+        if self.roi is not None:
+            slider_wl = IntRangeSlider(
+                value=[int(init_w0), int(init_w1)],
+                min=int(wl.min()),
+                max=int(wl.max()),
+                step=1,
+                description="λ (nm)",
+                continuous_update=False,
+                layout={'width': '700px'},
+            )
+
+            def on_wl_change(change):
+                w0, w1 = slider_wl.value
+                idx0 = int(np.abs(wl - w0).argmin())
+                idx1 = int(np.abs(wl - w1).argmin())
+                z_flat = _apply_norm(np.sum(self.spectra[:, idx0:idx1 + 1], axis=1))
+                with fig.batch_update():
+                    heat_trace.z = plots.base._as_grid(z_flat, self.scan)
+                    if zmin_auto:
+                        heat_trace.zmin = float(np.nanpercentile(z_flat, percentile))
+                    if zmax_auto:
+                        heat_trace.zmax = float(np.nanpercentile(z_flat, 100 - percentile))
+                    fig.layout.annotations[0].text = f"XEOL {w0:.0f}–{w1:.0f} nm"
+
+        else:
+            slider_wl = IntSlider(
+                value=int(init_w0),
+                min=int(wl.min()),
+                max=int(wl.max()),
+                step=1,
+                description="λ (nm)",
+                continuous_update=False,
+                layout={'width': '700px'},
+            )
+
+            def on_wl_change(change):
+                w = slider_wl.value
+                idx = int(np.abs(wl - w).argmin())
+                z_flat = _apply_norm(self.spectra[:, idx].copy())
+                with fig.batch_update():
+                    heat_trace.z = plots.base._as_grid(z_flat, self.scan)
+                    if zmin_auto:
+                        heat_trace.zmin = float(np.nanpercentile(z_flat, percentile))
+                    if zmax_auto:
+                        heat_trace.zmax = float(np.nanpercentile(z_flat, 100 - percentile))
+                    fig.layout.annotations[0].text = f"XEOL {w:.0f} nm"
 
         def on_index_change(change):
             idx = slider_idx.value
-            new_y = self.spectra[idx, :]
-
-            fig.data[-1].y = new_y
+            fig.data[-1].y = self.spectra[idx, :]
             fig.layout.annotations[1].text = f"Spectrum {idx}"
 
-        slider_roi.observe(on_roi_change, names="value")
+        slider_wl.observe(on_wl_change, names="value")
         slider_idx.observe(on_index_change, names="value")
 
-        return VBox([slider_roi, slider_idx, fig])
+        return VBox([slider_wl, slider_idx, fig])
