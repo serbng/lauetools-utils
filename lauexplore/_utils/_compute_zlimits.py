@@ -16,7 +16,8 @@ def compute_zlimits(
     scale : str
         - 'uniform'  → symmetric around 0
         - 'default'  → min, max, mean
-        - 'meanNsigma' (e.g. 'mean3sigma')
+        - 'meanNsigma' (e.g. 'zero3sigma') - sigma around 0
+        - 'meanMsigma' (e.g. 'mean3sigma') - sigma around Mean
     multiplier : float
         Scaling factor for visualization.
 
@@ -33,7 +34,7 @@ def compute_zlimits(
         return -gmax, gmax, 0.0
 
     # mean ± N sigma
-    if scale.startswith("mean") and scale.endswith("sigma"):
+    if scale.startswith("zero") and scale.endswith("sigma"):
         try:
             N = float(scale[4:-5])
         except ValueError:
@@ -53,6 +54,27 @@ def compute_zlimits(
             zmax = 1e-4
 
         return zmin, zmax, 0.0
+
+    if scale.startswith("mean") and scale.endswith("sigma"):
+        try:
+            M = float(scale[4:-5])
+        except ValueError:
+            print('invalid scale name.')
+            print('Setting scale as mean3sigma (i.e. mean value ± 3*std)')
+            M = 3.0
+        mean = np.nanmean(data)
+        std = np.nanstd(data)
+
+        zmin = mean - M * std
+        zmax = mean + M * std
+
+        # Enforce sign if degenerate
+        if zmin >= 0:
+            zmin = -1e-4
+        if zmax <= 0:
+            zmax = 1e-4
+
+        return zmin, zmax, mean
 
     # raw min/max
     if scale == "default":
