@@ -2,7 +2,6 @@ import numpy as np
 from pandas import DataFrame
 
 from lauexplore._utils.strings import clean_string, remove_newline
-from lauexplore.plots.base import indexation as indexation_plot
 character_list = ["[", "]", "\n", "#"]
 
 
@@ -189,7 +188,7 @@ def read_camera_dict(fitfile_obj, file, line):
     file.readline() # catch "DetectorParameters" string
     line = clean_string(file.readline(), character_list).split(", ")
     camera_dict["DetectorParameters"] = np.array([float(element) for element in line])
-    
+
     file.readline() # catch "pixelsize" string
     line = clean_string(file.readline(), character_list)
     camera_dict["pixelsize"] = float(line)
@@ -490,4 +489,5 @@ y_center: {self.CCDdict["DetectorParameters"][2]:7.2f} [px]
 """)
     
     def plot(self):
+        from lauexplore.plots.base import indexation as indexation_plot
         indexation_plot(self.peaklist)

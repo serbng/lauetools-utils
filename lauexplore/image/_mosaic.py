@@ -38,9 +38,9 @@ def _get_mosaic_line(
     for path in linepaths:
         # Fetch data whether it exists or not
         try:
-            image_data = read(path)[x1:x2, y1:y2]
+            image_data = read(path)[y1:y2, x1:x2]
         except(IndexError, IOError):
-            roi_boxsize = (x2-x1, y2-y1)
+            roi_boxsize = (y2-y1, x2-x1)
             image_data = np.zeros(roi_boxsize, dtype=np.uint16)
 
         line_data.append(image_data)
@@ -81,10 +81,10 @@ def _get_tile(
     ) -> np.ndarray:
     try:
         img = read(filepath)
-        tile = img[x1:x2, y1:y2]
+        tile = img[y1:y2, x1:x2]
         return tile
     except Exception:
-        return np.zeros((x2-x1, y2-y1), dtype=fill_dtype)
+        return np.zeros((y2-y1, x2-x1), dtype=fill_dtype)
 
 def build_mosaic(
         filepaths: Iterable[str | Path], 
