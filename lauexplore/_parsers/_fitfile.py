@@ -2,6 +2,7 @@ import numpy as np
 from pandas import DataFrame
 
 from lauexplore._utils.strings import clean_string, remove_newline
+
 character_list = ["[", "]", "\n", "#"]
 
 
