@@ -189,7 +189,7 @@ def read_camera_dict(fitfile_obj, file, line):
     file.readline() # catch "DetectorParameters" string
     line = clean_string(file.readline(), character_list).split(", ")
     camera_dict["DetectorParameters"] = np.array([float(element) for element in line])
-    
+
     file.readline() # catch "pixelsize" string
     line = clean_string(file.readline(), character_list)
     camera_dict["pixelsize"] = float(line)

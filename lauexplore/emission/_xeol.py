@@ -4,8 +4,8 @@ import numpy as np
 import h5py
 
 from ipywidgets import IntRangeSlider, IntSlider, VBox
+import matplotlib.pyplot as plt
 import plotly.graph_objects as go
-from plotly.subplots import make_subplots
 
 from lauexplore.scan import Scan
 from lauexplore import plots
@@ -25,7 +25,7 @@ class XEOL:
                 will be used for subtraction or a given value (float) for directly subtration
     """
 
-    spectra: np.ndarray                 # (Npoints, Nchannels)
+    spectra: np.ndarray                 # (Npoints, Nchannels) — raw on input, treated after __post_init__
     scan: Scan
     wl_array: np.ndarray  # (Nchannels,)
     channel: float | None = None        # always in nm
@@ -33,38 +33,67 @@ class XEOL:
     wavelength: float | tuple[float, float] | None = None
     normalize_to_monitor: bool = True
     norm_zone: tuple[float, float] | None = None
+    ref_data: tuple[int, int] | int | float | np.ndarray | None = None
     data: np.ndarray | None = None
+    spectra_raw: np.ndarray | None = None  # untouched, set from `spectra` input
 
     def __post_init__(self):
+        wl = self.wl_array
+
+        if self.spectra_raw is None:
+            self.spectra_raw = self.spectra
+
+        # --- reference subtraction ---
+        if isinstance(self.ref_data, tuple):
+            start_ref, end_ref = self.ref_data
+            ref_idx0 = int(np.abs(wl - start_ref).argmin())
+            ref_idx1 = int(np.abs(wl - end_ref).argmin())
+            ref = np.mean(self.spectra_raw[:, ref_idx0:ref_idx1], axis=1)[:, None]
+        elif isinstance(self.ref_data, (int, float, np.ndarray)):
+            ref = self.ref_data
+        else:
+            ref = 0
+
+        spectra = self.spectra_raw - ref
+        spectra = np.where(spectra < 0, 0, spectra)
+
+        # --- monitor normalisation (whole spectrum, per point) ---
+        if self.normalize_to_monitor:
+            spectra = spectra * 1e5 / self.scan.monitor_data[:, None]
+
+        # --- norm_zone normalisation (whole spectrum, per point) ---
+        if self.norm_zone is not None:
+            z0, z1 = self.norm_zone
+            i0 = int(np.abs(wl - z0).argmin())
+            i1 = int(np.abs(wl - z1).argmin())
+            dead_map = np.sum(spectra[:, i0:i1 + 1], axis=1)[:, None]
+            # TODO: rescale by dead_map's order of magnitude to avoid collapsing
+            # intensities by several decades (disabled for now — would change the
+            # scale of existing processed maps). Apply later.
+            # dead_median = np.median(dead_map)
+            # norm_scale = 10 ** np.round(np.log10(dead_median)) if dead_median > 0 else 1.0
+            # spectra = spectra / dead_map * norm_scale
+            spectra = spectra / dead_map
+
+        self.spectra = spectra
+
         if self.data is not None:
             return
         if self.roi is None and self.channel is None:
             return
 
-        wl = self.wl_array
-
         if self.roi is not None:
             start_nm, end_nm = self.roi
             idx0 = int(np.abs(wl - start_nm).argmin())
             idx1 = int(np.abs(wl - end_nm).argmin())
-            data = np.sum(self.spectra[:, idx0:idx1 + 1], axis=1)
+            data = np.sum(spectra[:, idx0:idx1 + 1], axis=1)
             if self.wavelength is None:
                 self.wavelength = self.roi
         else:
             idx = int(np.abs(wl - self.channel).argmin())
-            data = self.spectra[:, idx].copy()
+            data = spectra[:, idx].copy()
             if self.wavelength is None:
                 self.wavelength = float(wl[idx])
-
-        if self.normalize_to_monitor:
-            data = data * 1e5 / self.scan.monitor_data
-
-        if self.norm_zone is not None:
-            z0, z1 = self.norm_zone
-            i0 = int(np.abs(wl - z0).argmin())
-            i1 = int(np.abs(wl - z1).argmin())
-            dead_map = np.sum(self.spectra[:, i0:i1 + 1], axis=1)
-            data = data / dead_map
 
         self.data = data
 
@@ -90,67 +119,28 @@ class XEOL:
 
         # --- scan info ---
         scan = Scan.from_h5(filepath, scan_number)
-        mon = scan.monitor_data
 
         with h5py.File(filepath, "r") as h5f:
             # raw spectra (Npoints, Nchannels)
-            spectra = np.array(_h5.get_xeol(h5f, scan_number))
+            spectra_raw = np.array(_h5.get_xeol(h5f, scan_number))
 
             # wavelength calibration (nm)
             wl_array = h5f[f"{scan_number}.1/measurement/qepro_det1"][0]
 
-            # --- reference subtraction ---
             if ref_path is not None:
-                ref = h5f[ref_path][0]
+                ref_data = h5f[ref_path][0]
 
-            elif isinstance(ref_data, tuple):
-                start_ref, end_ref = ref_data
-                ref_idx0 = int(np.abs(wl_array - start_ref).argmin())
-                ref_idx1 = int(np.abs(wl_array - end_ref).argmin())
-                # mean over reference window, per scan point
-                ref = np.mean(spectra[:, ref_idx0:ref_idx1], axis=1)[:, None]
-                
-            elif isinstance(ref_data, (int,float)): 
-                ref = ref_data
-
-            else:
-                ref = 0
-                
-            spectra = spectra - ref
-            spectra = np.where(spectra < 0, 0, spectra)
-
-        # --- extract intensity for mapping ---
-        if roi is not None:
-            start_nm, end_nm = roi
-            idx0 = int(np.abs(wl_array - start_nm).argmin())
-            idx1 = int(np.abs(wl_array - end_nm).argmin())
-            data = np.sum(spectra[:, idx0:idx1 + 1], axis=1)
-            wavelength = (start_nm, end_nm)
-        else:
-            idx = int(np.abs(wl_array - channel).argmin())
-            data = spectra[:, idx]
-            wavelength = wl_array[idx]
-
-        if normalize_to_monitor:
-            data = data * 1e5 / mon
-
-        if norm_zone is not None:
-            z0, z1 = norm_zone
-            i0 = int(np.abs(wl_array - z0).argmin())
-            i1 = int(np.abs(wl_array - z1).argmin())
-            dead_map = np.sum(spectra[:, i0:i1 + 1], axis=1)
-            data = data / dead_map
-
+        # __post_init__ handles: reference subtraction, monitor normalisation,
+        # norm_zone normalisation, and `data` (ROI/channel) extraction.
         return cls(
-            spectra=spectra,
-            wavelength=wavelength,
+            spectra=spectra_raw,
             wl_array=wl_array,
             scan=scan,
             channel=channel,
             roi=roi,
             normalize_to_monitor=normalize_to_monitor,
             norm_zone=norm_zone,
-            data=data,
+            ref_data=ref_data,
         )
 
     # ------------------------------------------------------------------
@@ -205,202 +195,162 @@ class XEOL:
         return fig
 
     # ------------------------------------------------------------------
-    # INTERACTIVE: ipywidgets + FigureWidget (rápido e estável)
+    # INTERACTIVE: matplotlib + ipywidgets
     # ------------------------------------------------------------------
 
     def interactive_plot(
         self,
         *,
-        width: int = 1000,
-        height: int = 500,
+        figsize: tuple[float, float] = (12, 5),
         zmin: float | None = None,
         zmax: float | None = None,
         percentile: float = 2,
         title: str | None = None,
         xlabel: str | None = None,
         ylabel: str | None = None,
-        colorscale: str = "Viridis",
+        cmap: str = "viridis",
         log10: bool = False,
         cbartitle: str | None = None,
     ):
-        """
-        Interactive XEOL visualization (Jupyter):
+        """Interactive XEOL visualization (Jupyter, requires %matplotlib widget).
 
-        - IntRangeSlider (λ in nm) controla o ROI → atualiza apenas o mapa.
-        - IntSlider (point index) controla o espectro → atualiza apenas o trace de espectro.
-        - Usa go.FigureWidget para atualizar em tempo real, sem recriar a figura.
-        """
+        - Left panel: 2-D emission map; click any pixel to show its spectrum.
+        - Right panel: spectrum at the clicked scan point.
+        - Slider controls the wavelength ROI used to build the map.
 
+        With ``log10=True`` the map shows log10 of the integrated intensity, so
+        ``zmin``/``zmax`` are then given in log units.
+        """
         if self.scan is None:
             raise ValueError("scan must not be None.")
         if self.wl_array is None:
             raise ValueError("XEOL object has no wavelength calibration (`wl_array`).")
 
-        wl = self.wl_array
-        x = self.scan.xpoints * 1e3
-        y = self.scan.ypoints * 1e3
-        customdata, hover = plots.scan_hovermenu(self.scan)
+        from IPython.display import display as _display
 
-        # ----- initial ROI in nm -----
+        wl = self.wl_array
+        xp = self.scan.xpoints * 1e3   # (nbxpoints,) — unique x grid positions
+        yp = self.scan.ypoints * 1e3   # (nbypoints,) — unique y grid positions
+
+        # Flat position arrays (one entry per scan point, in scan order)
+        # needed to find the nearest point on click.
+        x_flat = np.empty(self.scan.length)
+        y_flat = np.empty(self.scan.length)
+        for k in range(self.scan.length):
+            ii, jj = self.scan.index_to_ij(k)
+            x_flat[k] = xp[ii]
+            y_flat[k] = yp[jj]
+
+        # ----- initial map data -----
         if self.roi is not None:
             init_w0, init_w1 = self.roi
         else:
             init_w0 = init_w1 = float(self.channel)
 
-        idx0_init = int(np.abs(wl - init_w0).argmin())
-        idx1_init = int(np.abs(wl - init_w1).argmin())
+        def _z_flat(w0, w1):
+            # self.spectra is already treated (ref subtraction + monitor +
+            # norm_zone), so this is a plain ROI integration.
+            idx0 = int(np.abs(wl - w0).argmin())
+            idx1 = int(np.abs(wl - w1).argmin())
+            z = np.sum(self.spectra[:, idx0:idx1 + 1], axis=1).astype(float)
+            if log10:
+                # non-positive sums would turn into -inf and drag the percentile
+                # limits below down with them, so they are dropped instead
+                z = np.log10(np.where(z > 0, z, np.nan))
+            return z
 
-        z_flat_init = np.sum(self.spectra[:, idx0_init:idx1_init + 1], axis=1)
-        if self.normalize_to_monitor:
-            z_flat_init = z_flat_init / self.scan.monitor_data
-        if self.norm_zone is not None:
-            z0, z1 = self.norm_zone
-            i0 = int(np.abs(wl - z0).argmin())
-            i1 = int(np.abs(wl - z1).argmin())
-            dead_map = np.sum(self.spectra[:, i0:i1 + 1], axis=1)
-            z_flat_init = z_flat_init / dead_map
-        z_init = plots.base._as_grid(z_flat_init, self.scan)
-        zmin_auto = zmin is None
-        zmax_auto = zmax is None
-        if zmin_auto:
-            zmin = float(np.nanpercentile(z_flat_init, percentile))
-        if zmax_auto:
-            zmax = float(np.nanpercentile(z_flat_init, 100 - percentile))
+        z_init = _z_flat(init_w0, init_w1)
+        grid   = plots.base._as_grid(z_init, self.scan)
 
-        # ----- build figure once (FigureWidget) -----
-        if title is None:
-            if self.roi is not None:
-                auto_title = f"XEOL {init_w0:.0f}–{init_w1:.0f} nm"
-            else:
-                auto_title = f"XEOL {init_w0:.0f} nm"
-        else:
-            auto_title = title
+        lo = zmin if zmin is not None else float(np.nanpercentile(z_init, percentile))
+        hi = zmax if zmax is not None else float(np.nanpercentile(z_init, 100 - percentile))
 
-        base_fig = make_subplots(
-            rows=1,
-            cols=2,
-            column_widths=[0.55, 0.45],
-            subplot_titles=[auto_title, "Spectrum"],
+        # extent: [xmin, xmax, ymin, ymax] in mm; _as_grid returns (ny, nx)
+        extent = [float(xp[0]), float(xp[-1]), float(yp[0]), float(yp[-1])]
+
+        auto_title = title or (
+            f"XEOL {init_w0:.0f}–{init_w1:.0f} nm"
+            if self.roi is not None else f"XEOL {init_w0:.0f} nm"
         )
 
-        fig = go.FigureWidget(base_fig)
+        # ----- figure -----
+        plt.close('xeol_interactive')
+        with plt.ioff():
+            fig, (ax_map, ax_spec) = plt.subplots(
+                1, 2, figsize=figsize, num='xeol_interactive'
+            )
 
-        # LEFT: heatmap (um único trace)
-        heatmap_fig = plots.base.heatmap(
-            z_init,
-            x,
-            y,
-            customdata=customdata,
-            hovertemplate=hover,
-            width=width // 2,
-            height=height,
-            zmin=zmin,
-            zmax=zmax,
-            title=None,
-            xlabel=xlabel,
-            ylabel=ylabel,
-            colorscale=colorscale,
-            log10=log10,
-            cbartitle=cbartitle,
+        im = ax_map.imshow(
+            grid, origin='lower', aspect='equal',
+            extent=extent, cmap=cmap, vmin=lo, vmax=hi,
+            interpolation='none',
         )
-        for tr in heatmap_fig.data:
-            fig.add_trace(tr, row=1, col=1)
+        cbar = plt.colorbar(im, ax=ax_map, fraction=0.046, pad=0.04)
+        if cbartitle is not None:
+            cbar.set_label(cbartitle)
+        ax_map.set_title(auto_title)
+        ax_map.set_xlabel(xlabel if xlabel is not None else 'x (mm)')
+        ax_map.set_ylabel(ylabel if ylabel is not None else 'y (mm)')
 
-        # guarda referência ao trace de mapa (assumindo 1 trace do heatmap)
-        heat_trace = fig.data[0]
-        
+        (marker,) = ax_map.plot([], [], '+', color='white', ms=14, mew=2, zorder=5)
 
-        # RIGHT: spectrum trace
-        spec_trace = go.Scatter(
-            x=wl,
-            y=self.spectra[0, :],
-            mode="lines",
-            name=None,
-        )
-        fig.add_trace(spec_trace, row=1, col=2)
+        spec_line, = ax_spec.plot(wl, self.spectra[0, :], color='C0')
+        ax_spec.set_xlabel('Wavelength (nm)')
+        ax_spec.set_ylabel('Intensity (a.u.)')
+        spec_text = ax_spec.set_title('Click map to show spectrum')
+        fig.tight_layout()
 
-        fig.update_xaxes(title_text="Wavelength (nm)", row=1, col=2)
-        fig.update_yaxes(title_text="Intensity (a.u.)", row=1, col=2)
-        fig.update_xaxes(constrain="domain", row=1, col=1)
-        fig.update_yaxes(scaleanchor="x", scaleratio=1, constrain="domain", row=1, col=1)
-        fig.update_layout(width=width, height=height)
-        
-
-        # ----- sliders -----
-        slider_idx = IntSlider(
-            value=0,
-            min=0,
-            max=self.spectra.shape[0] - 1,
-            step=1,
-            description="Point index",
-            continuous_update=True,
-            layout={'width': '400px'},
-        )
-
-        def _apply_norm(z_flat):
-            if self.normalize_to_monitor:
-                z_flat = z_flat / self.scan.monitor_data
-            if self.norm_zone is not None:
-                z0, z1 = self.norm_zone
-                i0 = int(np.abs(wl - z0).argmin())
-                i1 = int(np.abs(wl - z1).argmin())
-                dead_map = np.sum(self.spectra[:, i0:i1 + 1], axis=1)
-                z_flat = z_flat / dead_map
-            return z_flat
-
+        # ----- wavelength slider -----
         if self.roi is not None:
             slider_wl = IntRangeSlider(
                 value=[int(init_w0), int(init_w1)],
-                min=int(wl.min()),
-                max=int(wl.max()),
-                step=1,
-                description="λ (nm)",
-                continuous_update=False,
+                min=int(wl.min()), max=int(wl.max()), step=1,
+                description='λ (nm)', continuous_update=False,
                 layout={'width': '700px'},
             )
 
             def on_wl_change(change):
                 w0, w1 = slider_wl.value
-                idx0 = int(np.abs(wl - w0).argmin())
-                idx1 = int(np.abs(wl - w1).argmin())
-                z_flat = _apply_norm(np.sum(self.spectra[:, idx0:idx1 + 1], axis=1))
-                with fig.batch_update():
-                    heat_trace.z = plots.base._as_grid(z_flat, self.scan)
-                    if zmin_auto:
-                        heat_trace.zmin = float(np.nanpercentile(z_flat, percentile))
-                    if zmax_auto:
-                        heat_trace.zmax = float(np.nanpercentile(z_flat, 100 - percentile))
-                    fig.layout.annotations[0].text = f"XEOL {w0:.0f}–{w1:.0f} nm"
-
+                z = _z_flat(w0, w1)
+                im.set_data(plots.base._as_grid(z, self.scan))
+                im.set_clim(np.nanpercentile(z, percentile),
+                            np.nanpercentile(z, 100 - percentile))
+                ax_map.set_title(f'XEOL {w0:.0f}–{w1:.0f} nm')
+                fig.canvas.draw_idle()
         else:
             slider_wl = IntSlider(
                 value=int(init_w0),
-                min=int(wl.min()),
-                max=int(wl.max()),
-                step=1,
-                description="λ (nm)",
-                continuous_update=False,
+                min=int(wl.min()), max=int(wl.max()), step=1,
+                description='λ (nm)', continuous_update=False,
                 layout={'width': '700px'},
             )
 
             def on_wl_change(change):
                 w = slider_wl.value
-                idx = int(np.abs(wl - w).argmin())
-                z_flat = _apply_norm(self.spectra[:, idx].copy())
-                with fig.batch_update():
-                    heat_trace.z = plots.base._as_grid(z_flat, self.scan)
-                    if zmin_auto:
-                        heat_trace.zmin = float(np.nanpercentile(z_flat, percentile))
-                    if zmax_auto:
-                        heat_trace.zmax = float(np.nanpercentile(z_flat, 100 - percentile))
-                    fig.layout.annotations[0].text = f"XEOL {w:.0f} nm"
+                z = _z_flat(w, w)
+                im.set_data(plots.base._as_grid(z, self.scan))
+                im.set_clim(np.nanpercentile(z, percentile),
+                            np.nanpercentile(z, 100 - percentile))
+                ax_map.set_title(f'XEOL {w:.0f} nm')
+                fig.canvas.draw_idle()
 
-        def on_index_change(change):
-            idx = slider_idx.value
-            fig.data[-1].y = self.spectra[idx, :]
-            fig.layout.annotations[1].text = f"Spectrum {idx}"
+        slider_wl.observe(on_wl_change, names='value')
 
-        slider_wl.observe(on_wl_change, names="value")
-        slider_idx.observe(on_index_change, names="value")
+        # ----- click handler -----
+        def _on_click(event):
+            if event.inaxes is not ax_map or event.xdata is None:
+                return
+            dists     = np.hypot(x_flat - event.xdata, y_flat - event.ydata)
+            point_idx = int(np.argmin(dists))
+            spec      = self.spectra[point_idx, :]
+            spec_line.set_ydata(spec)
+            ax_spec.relim()
+            ax_spec.autoscale_view()
+            spec_text.set_text(f'Point {point_idx}  '
+                               f'({x_flat[point_idx]:.3f}, {y_flat[point_idx]:.3f}) mm')
+            marker.set_data([event.xdata], [event.ydata])
+            fig.canvas.draw_idle()
 
-        return VBox([slider_wl, slider_idx, fig])
+        fig.canvas.mpl_connect('button_press_event', _on_click)
+
+        _display(VBox([slider_wl, fig.canvas]))

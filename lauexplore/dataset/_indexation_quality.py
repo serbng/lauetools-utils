@@ -91,6 +91,14 @@ class IndexationQuality:
         if mask is not None:
             data = np.where(mask, data, np.nan)
 
+        n_total = data.size
+        n_used = int(np.count_nonzero(np.isfinite(data)))
+        n_masked = n_total - n_used
+        print(
+            f"{title}: mean={np.nanmean(data):.2f}, sigma={np.nanstd(data):.2f}, "
+            f"used={n_used}/{n_total} px, masked={n_masked} px"
+        )
+
         # ---- compute automatic z-limits ----
         if scale is not None:
             zmin, zmax, zmid = compute_zlimits(data, scale=scale, multiplier=multiplier)
